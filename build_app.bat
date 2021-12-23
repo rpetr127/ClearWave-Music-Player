@@ -1,0 +1,1 @@
+python -m nuitka --onefile --windows-onefile-tempdir --follow-imports --plugin-enable=qt-plugins --include-data-dir=Icons=Icons --include-data-dir=lib=lib --include-data-dir=logo_urls=logo_urls --windows-disable-console --windows-icon-from-ico=Icons/app.ico main.py

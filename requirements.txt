@@ -1,0 +1,8 @@
+pyglet==2.0.dev7
+tinytag==1.5.0
+PyInstaller
+PySide6
+ptpython
+pillow
+requests~=2.25.1
+setuptools~=52.0.0
