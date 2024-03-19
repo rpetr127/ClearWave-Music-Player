@@ -1,7 +1,7 @@
 pyglet==2.0.dev7
-tinytag==1.5.0
+tinytag
 PyInstaller
-PySide6
+PyQt5
 ptpython
 pillow
 requests~=2.25.1

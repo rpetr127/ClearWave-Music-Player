@@ -3,12 +3,12 @@
 
 block_cipher = None
 
-data=[("Icons/*.png", "Icons"), ("logo_urls/*.CSV", "logo_urls")]
-bin = [("lib/*", "lib")]
+data=[("icons/*.png", "Icons"), ("logo_urls/*.CSV", "logo_urls")]
+bin = [("Lib/*", "Lib")]
 
 
-a = Analysis(['main.py'],
-             pathex=['C:\\Users\\t7user\\PycharmProjects\\music_player'],
+a = Analysis(['__main__.py'],
+             pathex=['C:\\Users\\Admin\\python\\ClearWave-Music-Player'],
              binaries=bin,
              datas=data,
              hiddenimports=[],
@@ -34,5 +34,5 @@ exe = EXE(pyz,
           upx=True,
           upx_exclude=[],
           runtime_tmpdir=None,
-          console=False, icon='Icons\\app.ico')
+          console=False, icon='icons\\app.ico')
 
