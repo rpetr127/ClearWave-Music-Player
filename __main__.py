@@ -75,7 +75,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
             QSlider::sub-page:qlineargradient {
                 border-radius: 5px;
             }''')
-        self.horizontalSlider.valueChanged[int].connect(self.changeSliderValue)
+        self.horizontalSlider.valueChanged[int].connect(self.change_slider_value)
         self.action.triggered.connect(self.open_file)
         self.actionOpen_folder.triggered.connect(self.open_folder)
         self.actionOpen_URL.triggered.connect(self.dialog.exec)
@@ -253,6 +253,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
 
     def play_event(self, event):
         self.player.counter()
+        filepath = Data.filelist[self.listWidget.currentRow()]
         if self.player.count == 1:
             if self.is_stream():
 
@@ -279,14 +280,12 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
             else:
                 if self.player.state == "stop":
                     self.song_timer.start()
-                    my_event = Thread(target=self.play_song)
-                    my_event.start()
+                    self.play_song(filepath)
                 else:
                     if self.player.state == "item_changed":
-                        my_thread = Thread(target=self.changeIcon)
+                        my_thread = Thread(target=self.changePlayButtonIcon)
                         my_thread.start()
-                        filepath = Data.filelist[self.listWidget.currentRow()]
-                        self.player.play_song(filepath)
+                        self.play_song(filepath)
                     else:
                         if self.player.state == "playing":
                             self.play_button.setIcon(self.play_icon)
@@ -304,7 +303,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
             self.play_song(file)
 
     def start_timer(self):
-        self.setSliderPos()
+        self.set_slider_pos()
         self.playback_event()
 
 
@@ -332,6 +331,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
     mutex = Lock()
 
     def play_song(self, file, *args):
+        self.change_icon()
         self.player.play_song(file)
         self.get_song_metadata()
 
@@ -438,7 +438,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         #     pixmap.load(logo_icon)
         #     self.imgWidget.setPixmap(pixmap)
 
-    def setSliderPos(self, value=0):
+    def set_slider_pos(self, value=0):
         value = int(value)
         current_duration = self.player.get_duration()
         if value != 0 and (value - current_duration > 3 or value < current_duration):
@@ -447,12 +447,13 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
             self.player.seek(pts)
         self.horizontalSlider.setValue(self.player.get_duration())
 
-    def changeSliderValue(self, value):
-        self.setSliderPos(value)
+    def change_slider_value(self, value):
+        self.set_slider_pos(value)
 
-    def changeIcon(self):
-        self.play_button.setIcon(self.play_icon)
-        time.sleep(0.3)
+    def change_play_button_icon(self):
+        if self.player.state == "item_changed":
+            self.play_button.setIcon(self.play_icon)
+            time.sleep(0.3)
         self.play_button.setIcon(self.play_icon_2)
 
     def prev_song(self, event):
@@ -468,7 +469,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         self.play_song(file)
 
     def stop(self, event):
-        self.play_button.setPixmap(self.pixmap)
+        self.play_button.setIcon(self.play_icon)
         self.player.stop()
 
     def closeEvent(self, event):
@@ -479,6 +480,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         except:
             pass
         if self.my_thread.is_alive():
+            self.player.delete()
             pyglet.app.exit()
         if self.my_thread2.is_alive():
             self.my_thread2.join()

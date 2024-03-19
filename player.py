@@ -76,5 +76,8 @@ class Player:
     def stop(self):
         self.state = "stop"
         self.player.seek(0)
-        self.player.delete()
+        self.player.pause()
         pyglet.app.event_loop.exit_blocking()
+
+    def delete(self):
+        self.player.delete()
