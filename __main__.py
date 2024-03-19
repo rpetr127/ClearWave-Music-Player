@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import csv
 import json
+import logging
 import os
 import re
 import subprocess
@@ -9,17 +10,21 @@ import time
 import traceback
 from io import BytesIO
 from threading import Lock, Thread, Timer
+import tempfile
+sys.coinit_flags = 2
 
 import requests
+import tinytag
 from tinytag import TinyTag
 from PIL import Image
-from PySide6.QtCore import *
-from PySide6.QtGui import *
+from PyQt5.QtGui import *
+from PyQt5.QtWidgets import QListWidget, QLabel
 import pyglet
+from player import Player
 
 from design import Ui_MainWindow
 from dialog import *
-from path import dirpath, ffprobe, ffplay, app_icon, logo_icon, play_icon, pause_icon, logo_urls
+from path import (dirpath, ffprobe, ffplay, app_icon, logo_icon, play_icon, pause_icon, music_icon, logo_urls)
 import m3u_parser
 
 try:
@@ -27,8 +32,6 @@ try:
 except ImportError:
     DEVNULL = os.open(os.devnull, os.O_RDWR)
 
-pyglet.options['audio'] = ('directsound', 'silent')
-pyglet.options['search_local_libs'] = True
 
 # sys.stderr = open('D:\\output.txt', 'w')
 
@@ -43,13 +46,13 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         self.song_timer.setInterval(10)
         self.song_timer.timeout.connect(self.start_timer)
         self.stream_timer = Timer(3.5, self.start_stream_timer)
+        self.player = Player()
+        self.state = self.player.state
         self.setupUi(self)
         self.dialog = SelectStreamDialog(self)
         self.play_button.mouseReleaseEvent = self.play_event
-        self.pixmap = QPixmap()
-        self.pixmap.load(play_icon)
-        self.pixmap_2 = QPixmap()
-        self.pixmap_2.load(pause_icon)
+        self.play_icon = QIcon(play_icon)
+        self.play_icon_2 = QIcon(pause_icon)
         self.prev_button.mouseReleaseEvent = self.prev_song
         self.forward_button.mouseReleaseEvent = self.forward_song
         self.stop_button.mouseReleaseEvent = self.stop
@@ -90,7 +93,6 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         self.timer_count = 0
         self.actionOpen_playlist.triggered.connect(self.open_playlist)
         self.actionSave_playlist.triggered.connect(self.save_playlist)
-        self.state = 'started'
         urls_file = open(logo_urls, 'r', encoding='utf-8')
         reader = csv.DictReader(urls_file)
         self.rs_data = [self.format_name(row) for row in reader]
@@ -100,7 +102,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
     def open_file(self):
         self.fpathlist = []
         self.files = QFileDialog(directory=dirpath).getOpenFileUrls()[0]
-        if self.files != []:
+        if self.files:
             for i in self.files:
                 Data.filelist.append(i.path()[1:])
                 self.listWidget.addItem(i.fileName())
@@ -113,17 +115,32 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         if self.dir.path() != '':
             fp = self.dir.path()[1:]
             self.listWidget.clear()
+            Data.filelist.clear()
             self.filenames = os.listdir(fp)
             for i in self.filenames:
-                tag = TinyTag.get(f'{fp}\\{i}')
-                if tag.title != '' and tag.artist != '':
-                    self.listWidget.addItem(f'{tag.artist} - {tag.title}')
-                elif tag.title and tag.artist == '':
-                    self.listWidget.addItem(tag.title)
-                else:
-                    self.listWidget.addItem(i)
-            Data.filelist = []
-            Data.filelist.extend(['{0}/{1}'.format(fp, i) for i in self.filenames])
+                path = f'{fp}\\{i}'
+                if TinyTag.is_supported(path):
+                    tag = TinyTag.get(path, image=True)
+                    if tag.title != '' and tag.artist != '':
+                        temp_file = tempfile.NamedTemporaryFile("w+b", prefix="image", suffix=".png",
+                                                                delete=False)
+                        title = f'{tag.artist} - {tag.title}'
+                        image = tag.get_image()
+                        if image:
+                            temp_file.write(image)
+                            temp_file.seek(0)
+                            image_src = temp_file.name
+                            print(image_src)
+                            temp_file.close()
+                            item = QListWidgetItem(QIcon(image_src), title)
+                        else:
+                            item = QListWidgetItem(QIcon(music_icon), title)
+                        item.setSizeHint(QSize(25, 25))
+                        self.listWidget.addItem(item)
+                    elif tag.title and tag.artist == '':
+                        item = QListWidgetItem(QIcon(music_icon), i)
+                        self.listWidget.addItem(item)
+                    Data.filelist.append('{0}/{1}'.format(fp, i))
         else:
             pass
 
@@ -148,12 +165,25 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         Data.streamlist = []
         if playlist.files:
             for i in playlist.files:
-                tag = TinyTag.get(i.file)
-                Data.filelist.append(i.file)
-                if tag.title != '' and tag.artist != '':
-                    self.listWidget.addItem(f'{tag.artist} - {tag.title}')
-                elif tag.title and tag.artist == '':
-                    self.listWidget.addItem(tag.title)
+                if TinyTag.is_supported(i.file):
+                    tag = TinyTag.get(i.file, image=True)
+                    Data.filelist.append(i.file)
+                    if tag.title != '' and tag.artist != '':
+                        title = f'{tag.artist} - {tag.title}'
+                        art = tag.get_image()
+                        temp_file = tempfile.NamedTemporaryFile("w+b", prefix="image", suffix=".png",
+                                                                delete=False, delete_on_close=False)
+                        if art:
+                            image = Image.open(art)
+                            image.save(temp_file.name, format="png")
+                            temp_file.close()
+                            item = QListWidgetItem(QIcon(temp_file.name), title)
+                        else:
+                            item = QListWidgetItem(QIcon(music_icon), title)
+                        item.setSizeHint(QSize(25, 25))
+                        self.listWidget.addItem(item)
+                    elif tag.title and tag.artist == '':
+                        self.listWidget.addItem(i.file)
                 else:
                     self.listWidget.addItem(i)
         if playlist.urls:
@@ -168,7 +198,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         if self.playlist[0].path() != '':
             file = self.playlist[0].path()[1:]
             with open(file, 'w', encoding='utf-8', errors='ignore') as file:
-                if Data.filelist != []:
+                if Data.filelist:
                     file.writelines(('#EXTM3U', '\n'))
                     for i in Data.filelist:
                         tag = TinyTag.get(i)
@@ -177,13 +207,12 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
                         file.writelines((desc, '\n', filepath, '\n'))
                 if Data.pls_content != '':
                     file.write(Data.pls_content)
-
-
         else:
             pass
 
-    def is_stream(self):
-        if Data.filelist == []:
+    @staticmethod
+    def is_stream():
+        if not Data.filelist:
             return True
         else:
             return False
@@ -220,85 +249,69 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
                     my_thread.start()
         else:
             pass
-        if self.count == 0:
-            self.state = 'started'
-        else:
-            self.state = "item_changed"
-        print(self.state)
+        self.player.change_song()
 
     def play_event(self, event):
-        self.counter()
-        if self.count == 1:
+        self.player.counter()
+        if self.player.count == 1:
             if self.is_stream():
 
-                self.play_button.setPixmap(self.pixmap_2)
-                self.state = 'playing'
+                self.play_button.setIcon(self.play_icon_2)
+                self.player.state = 'playing'
                 self.start_streaming()
             else:
-                self.play_button.setPixmap(self.pixmap_2)
-                if self.state == 'started' or self.state == 'stop':
-                    self.my_thread.start()
+                self.play_button.setIcon(self.play_icon_2)
+                if self.player.state in ("started", "stop", "paused"):
+                    self.start_playing()
                     time.sleep(0.5)
                     self.song_timer.start()
-        elif self.count > 1:
+        elif self.player.count > 1:
             if self.is_stream():
                 self.proc.terminate()
                 self.my_thread2.join(0.03)
-                if self.state == 'playing':
-                    self.play_button.setPixmap(self.pixmap)
-                    self.state = 'stop'
+                if self.player.state == 'playing':
+                    self.play_button.setIcon(self.play_icon)
+                    self.player.state = 'stop'
                 else:
-                    self.state = 'playing'
+                    self.play_button.setIcon(self.play_icon_2)
+                    self.player.state = 'playing'
                     self.start_streaming()
             else:
-                if self.state == 'stop':
+                if self.player.state == "stop":
                     self.song_timer.start()
                     my_event = Thread(target=self.play_song)
                     my_event.start()
                 else:
-                    if self.state == "item_changed":
-                        self.my_thread = Thread(target=self.play_song)
-                        self.my_thread.start()
+                    if self.player.state == "item_changed":
+                        my_thread = Thread(target=self.changeIcon)
+                        my_thread.start()
+                        filepath = Data.filelist[self.listWidget.currentRow()]
+                        self.player.play_song(filepath)
                     else:
-                        if self.player.playing:
-                            self.play_button.setPixmap(self.pixmap)
-                            my_thread = Thread(target=self.pause)
-                            self.playing_time = self.player.time
-                            self.duration = self.source.duration
+                        if self.player.state == "playing":
+                            self.play_button.setIcon(self.play_icon)
+                            my_thread = Thread(target=self.player.pause)
                             my_thread.start()
                         else:
-                            self.play_button.setPixmap(self.pixmap_2)
-                            self.state = 'playing'
-                            my_thread = Thread(target=self.resume)
+                            self.play_button.setIcon(self.play_icon_2)
+                            my_thread = Thread(target=self.player.resume)
                             my_thread.start()
 
-    def counter(self):
-        self.count += 1
-        if self.count == 11:
-            self.count = 3
-
     def playback_event(self):
-        pts = round(self.player.time, 2)
-        duration = round(self.source.duration, 2)
-        self.get_song_metadata()
-        if pts == duration:
+        if self.player.is_next_song():
             self.listWidget.setCurrentRow(self.listWidget.currentRow() + 1)
-            pyglet.app.event_loop.exit_blocking()
-            self.my_thread = Thread(target=self.play_song)
-            self.my_thread.start()
+            file = Data.filelist[self.listWidget.currentRow()]
+            self.play_song(file)
 
     def start_timer(self):
         self.setSliderPos()
         self.playback_event()
 
+
     def start_playing(self):
-        self.state = 'playing'
-        self.player = pyglet.media.Player()
         file = Data.filelist[self.listWidget.currentRow()]
-        self.source = pyglet.media.load(file)
-        self.player.queue(self.source)
-        self.player.play()
-        pyglet.app.run()
+        my_thread = Thread(target=self.player.start_playing, args=(file,))
+        my_thread.start()
         self.get_song_metadata()
 
     def start_streaming(self):
@@ -316,17 +329,10 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
             if re.search(r'stop|close_app', self.state):
                 break
 
-    def play_song(self):
-        self.play_button.setPixmap(self.pixmap_2)
-        time.sleep(0.5)
-        self.state = 'playing'
-        self.play_button.setPixmap(self.pixmap_2)
-        self.player = pyglet.media.Player()
-        file = Data.filelist[self.listWidget.currentRow()]
-        self.source = pyglet.media.load(file)
-        self.player.queue(self.source)
-        self.player.play()
-        pyglet.app.event_loop.enter_blocking()
+    mutex = Lock()
+
+    def play_song(self, file, *args):
+        self.player.play_song(file)
         self.get_song_metadata()
 
     def play_stream(self):
@@ -340,25 +346,23 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
                                      creationflags=subprocess.CREATE_NO_WINDOW)
         self.proc.communicate()
 
-    def pause(self):
-        self.player.pause()
-        pyglet.app.event_loop.exit_blocking()
 
-    def resume(self):
-        pyglet.app.event_loop.enter_blocking()
-        self.player.play()
 
     def get_song_metadata(self):
         row = self.listWidget.currentRow()
         file = Data.filelist[row]
-        self.tag = TinyTag.get(file, image=True)
-        tag_img = self.tag.get_image()
-        print(self.tag.title)
-        if tag_img:
-            self.resize_image(img_data=tag_img)
-        self.metadataWidget.setText(f'{self.tag.title}\n{self.tag.artist} - {self.tag.album}')
+        try:
+            self.tag = TinyTag.get(file, image=True)
+            tag_img = self.tag.get_image()
+            if tag_img:
+                self.resize_image(img_data=tag_img)
+            self.metadataWidget.setText(f'{self.tag.title}\n{self.tag.artist} - {self.tag.album}')
+        except tinytag.TinyTagException:
+            self.forward_song()
 
-    def format_name(self, i):
+
+    @staticmethod
+    def format_name(i):
         i['radio_name'] = i['radio_name'].lower()
         return i
 
@@ -366,7 +370,8 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
         self.timer_count += 1
         print(self.timer_count)
         self.stream_url = Data.streamlist[self.listWidget.currentRow()]
-        cmd = f'{ffprobe} -v quiet -show_entries format_tags=StreamTitle -of json {Data.streamlist[self.listWidget.currentRow()]}'
+        row = self.listWidget.currentRow()
+        cmd = f'{ffprobe} -v quiet -show_entries format_tags=StreamTitle -of json {Data.streamlist[row]}'
         stdout = subprocess.check_output(cmd, stdin=DEVNULL, stderr=DEVNULL,
                                          creationflags=subprocess.CREATE_NO_WINDOW)
         if stdout:
@@ -379,7 +384,7 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
                 self.metadataWidget.setText(f'{self.radio_name}\n{stream_title}')
 
     def load_img_data(self):
-        item = re.sub(r'^[\d\.\-\_ ]+', '', self.listWidget.currentItem().text().lower())
+        item = re.sub(r'^[\d.\-_ ]+', '', self.listWidget.currentItem().text().lower())
         item = item.strip()
         q = False
         for index, i in enumerate(self.radio_names):
@@ -398,15 +403,13 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
             pixmap.load(logo_icon)
             self.imgWidget.setPixmap(pixmap)
 
-    def get_duration(self):
-        current_duration = int(self.player.time / self.source.duration * 500)
-        return current_duration
-
     def resize_image(self, **kwargs):
         # try:
+        img_url = str()
+        im_resized = Image.Image()
         if kwargs:
             if kwargs.get('img_data'):
-                pixmap = QPixmap()
+                # pixmap = QPixmap()
                 byte_array = BytesIO(kwargs['img_data'])
                 image = Image.open(byte_array)
                 im_resized = image.resize((30, 30))
@@ -437,32 +440,44 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
 
     def setSliderPos(self, value=0):
         value = int(value)
-        current_duration = self.get_duration()
+        current_duration = self.player.get_duration()
         if value != 0 and (value - current_duration > 3 or value < current_duration):
-            pts = self.source.duration / 500 * value
+            pts = self.player.source_duration / 500 * value
             pts = round(pts, 2)
             self.player.seek(pts)
-        print(self.get_duration())
-        self.horizontalSlider.setValue(self.get_duration())
+        self.horizontalSlider.setValue(self.player.get_duration())
 
     def changeSliderValue(self, value):
         self.setSliderPos(value)
 
-    def prev_song(self, event):
-        self.playlistWidget.setCurrentRow(self.playlistWidget.currentRow() - 1)
-        self.play_song()
+    def changeIcon(self):
+        self.play_button.setIcon(self.play_icon)
+        time.sleep(0.3)
+        self.play_button.setIcon(self.play_icon_2)
 
-    def forward_song(self, event):
-        self.playlistWidget.setCurrentRow(self.playlistWidget.currentRow() + 1)
-        self.play_song()
+    def prev_song(self, event):
+        self.listWidget.setCurrentRow(self.listWidget.currentRow() - 1)
+        file = Data.filelist[self.listWidget.currentRow()]
+        print("previous song")
+        self.play_song(file)
+
+    def forward_song(self, event=None):
+        self.listWidget.setCurrentRow(self.listWidget.currentRow() + 1)
+        file = Data.filelist[self.listWidget.currentRow()]
+        print("next song")
+        self.play_song(file)
 
     def stop(self, event):
-        self.play_button.setPixmap(self.pixmap_2)
-        self.player.seek(0)
-        self.player.pause()
+        self.play_button.setPixmap(self.pixmap)
+        self.player.stop()
 
     def closeEvent(self, event):
         self.state = 'close_app'
+        try:
+            self.proc.terminate()
+            self.destroy(True, True)
+        except:
+            pass
         if self.my_thread.is_alive():
             pyglet.app.exit()
         if self.my_thread2.is_alive():
@@ -471,25 +486,17 @@ class PlayerApp(QMainWindow, Ui_MainWindow):
             self.song_timer.stop()
         if self.stream_timer.is_alive():
             self.stream_timer.cancel()
-        try:
-            self.proc.terminate()
-        except:
-            pass
-        try:
-            self.proc_2.terminate()
-        except:
-            pass
+
 
 
 def show_alert():
     msgBox = QMessageBox()
-    msgBox.setDefaultButton(QMessageBox.Yes)
     msgBox.setText('Stream is not available')
     msgBox.exec()
 
 
 class SelectStreamDialog(QDialog, Ui_StreamInputDialog):
-    def __init__(self, root, **kwargs):
+    def __init__(self, root):
         super(SelectStreamDialog, self).__init__()
         self.setupUi(self)
         self.main = root
@@ -544,7 +551,7 @@ def main():
     app = QApplication(sys.argv)
     window = PlayerApp()
     window.show()
-    app.exec()
+    app.exec_()
 
 
 if __name__ == '__main__':

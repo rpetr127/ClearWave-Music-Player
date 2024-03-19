@@ -8,9 +8,9 @@
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
 
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-from PySide6.QtWidgets import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5.QtWidgets import *
 
 from path import *
 
@@ -71,38 +71,58 @@ class Ui_MainWindow(object):
         self.horizontalLayout = QHBoxLayout(self.layoutWidget)
         self.horizontalLayout.setObjectName(u"horizontalLayout")
         self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
-        self.prev_button = QLabel(self.layoutWidget)
+        self.prev_button = QPushButton(self.layoutWidget)
+        self.prev_button.setStyleSheet('''QPushButton {
+                                                        border-radius: 45px;
+                                                        margin: 10px;
+                                                      }''')
+        self.prev_button.setIcon(QIcon(prev_icon))
         self.prev_button.setObjectName(u"prev_button")
         sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.prev_button.sizePolicy().hasHeightForWidth())
         self.prev_button.setSizePolicy(sizePolicy)
-        self.prev_button.setPixmap(QPixmap(prev_icon))
+        # self.prev_button.setPixmap(QPixmap(prev_icon))
 
         self.horizontalLayout.addWidget(self.prev_button)
 
-        self.play_button = QLabel(self.layoutWidget)
+        self.play_button = QPushButton(self.layoutWidget)
+        self.play_button.setStyleSheet('''QPushButton {
+                                                        border-radius: 45px;
+                                                        margin: 10px;
+                                                      }''')
+        self.play_button.setIcon(QIcon(play_icon))
         self.play_button.setObjectName(u"play_button")
         sizePolicy.setHeightForWidth(self.play_button.sizePolicy().hasHeightForWidth())
         self.play_button.setSizePolicy(sizePolicy)
-        self.play_button.setPixmap(QPixmap(play_icon))
+        # self.play_button.setPixmap(QPixmap(play_icon))
 
         self.horizontalLayout.addWidget(self.play_button)
 
-        self.forward_button = QLabel(self.layoutWidget)
+        self.forward_button = QPushButton(self.layoutWidget)
+        self.forward_button.setStyleSheet('''QPushButton {
+                                                        border-radius: 45px;
+                                                        margin: 10px;
+                                                      }''')
+        self.forward_button.setIcon(QIcon(forward_icon))
         self.forward_button.setObjectName(u"forward_button")
         sizePolicy.setHeightForWidth(self.forward_button.sizePolicy().hasHeightForWidth())
         self.forward_button.setSizePolicy(sizePolicy)
-        self.forward_button.setPixmap(QPixmap(forward_icon))
+        # self.forward_button.setPixmap(QPixmap(forward_icon))
 
         self.horizontalLayout.addWidget(self.forward_button)
 
-        self.stop_button = QLabel(self.layoutWidget)
+        self.stop_button = QPushButton(self.layoutWidget)
+        self.stop_button.setIcon(QIcon(stop_icon))
         self.stop_button.setObjectName(u"stop_button")
+        self.stop_button.setStyleSheet('''QPushButton {
+                                                        border-radius: 45px;
+                                                        margin: 10px;
+                                                      }''')
         sizePolicy.setHeightForWidth(self.stop_button.sizePolicy().hasHeightForWidth())
         self.stop_button.setSizePolicy(sizePolicy)
-        self.stop_button.setPixmap(QPixmap(stop_icon))
+        # self.stop_button.setPixmap(QPixmap(stop_icon))
 
         self.horizontalLayout.addWidget(self.stop_button)
 

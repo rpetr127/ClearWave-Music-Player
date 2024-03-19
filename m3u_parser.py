@@ -1,7 +1,8 @@
+import os
 import re
 from pprint import pprint
 
-import requests
+import urllib.request
 
 
 class Datas(object):
@@ -25,6 +26,9 @@ class Files:
     def __getitem__(self, item):
         cls = FileMetadata(self.files[item])
         return cls
+    
+    def __len__(self):
+        return len(self.files)
 
 class Urls:
     def __init__(self, urls=None):
@@ -37,24 +41,38 @@ class Urls:
 
 class FileMetadata:
     def __init__(self, item=None):
+        # if "\n" in item:
+        #     self.item = item.split('\n')
+        # else:
         self.item = item
 
     @property
-    def file(self):
-        self._file = self.item.split('\n')[1]
-        return self._file
+    def path(self):
+        # if len(self.item) >= 2:
+        #     self._path = self.item[1]
+        # else:
+        self._path = self.item
+        return self._path
+
+    @property
+    def name(self):
+        self._name = os.path.split(self.path)[-1]
+        return(self._name)
 
     @property
     def title(self):
-        self._title = self.item.split('\n')[0].split(',')[1]
+        if len(self.item) >= 2:
+            self._title = self.item[0].split(',')[1]
+        else:
+            self._title = None
         return self._title
 
     @property
     def duration(self):
-        self._duration = self.item.split('\n')[0].split(',')[0]
+        self._duration = self.item[0].split(',')[0]
         return self._duration
 
-    @file.setter
+    @path.setter
     def file(self, value):
         self._file = ''
 
@@ -102,10 +120,16 @@ class StreamMetadata:
         self._picture = ''
 
 
+def create_playlist(path: str, items: list):
+    with open(path, "w", encoding="utf-8") as file:
+        for item in items:
+            file.write("%s\n" % item)
+
+
 def load(url=None, filepath=None):
     if url:
-        response = requests.get(url)
-        metadata = response.text
+        response = urllib.request.urlopen(url)
+        metadata = response.read()
     else:
         file = open(filepath, 'r', encoding='utf-8', errors='ignore')
         metadata = file.read()
@@ -115,15 +139,13 @@ def load(url=None, filepath=None):
 def split(metadata):
     files = None
     urls = None
-    content = metadata
-    datas = re.split(r'EXTM3U[\w\S ]*\r?\n', metadata[1:])
-    datas = re.split(r'\n#EXTINF:', datas[1])
-    for i in datas[1:]:
-        if not re.search(r'https?', i):
-            files = datas[1:]
-            break
-        if re.search(r'https?', i):
-            urls = datas[1:]
-            break
-    data = Datas(files, urls, content)
+    if re.search("#EXTM3U", metadata):
+        lst = re.split(r'((?<=\#EXTM3U\n)(\#EXTINF\:)*)', metadata)
+    else:
+        lst = re.split(r"\n", metadata)
+    if not re.search(r'https?', lst[0]):
+        files = lst
+    if re.search(r'https?', lst[0]):
+        urls = lst
+    data = Datas(files, urls)
     return data
